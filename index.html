@@ -579,8 +579,21 @@
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
             document.querySelector(`.tab[data-page="${page}"]`).classList.add('active');
-            document.getElementById(page + '-page').classList.add('active');
-            setTimeout(() => initCharts(page), 100);
+            const targetPage = document.getElementById(page + '-page');
+            targetPage.classList.add('active');
+            // 强制触发一次 reflow,让浏览器完成 display:none → block 的布局计算
+            void targetPage.offsetHeight;
+            // 等 50ms 让 ZRender 画布的 hit-test 区域建立,再初始化
+            setTimeout(function() {
+                initCharts(page);
+                // 初始化后再 resize 一次,确保画布尺寸和事件坐标准确
+                setTimeout(function() {
+                    if (chartInstances[page]) {
+                        if (chartInstances[page].bar) chartInstances[page].bar.resize();
+                        if (chartInstances[page].line) chartInstances[page].line.resize();
+                    }
+                }, 50);
+            }, 50);
         }
 
         // ========== 数据转换工具 ==========
@@ -1020,8 +1033,28 @@
             refreshReturnLineChart();
         });
 
-        // 初始化默认页面
-        initCharts('reject');
+        // 初始化默认页面(首次加载也走延迟 + resize,避免布局未完成导致事件不触发)
+        function bootstrapDefaultPage() {
+            const defaultPage = 'reject';
+            const targetPage = document.getElementById(defaultPage + '-page');
+            // 强制 reflow
+            void targetPage.offsetHeight;
+            setTimeout(function() {
+                initCharts(defaultPage);
+                setTimeout(function() {
+                    if (chartInstances[defaultPage]) {
+                        if (chartInstances[defaultPage].bar) chartInstances[defaultPage].bar.resize();
+                        if (chartInstances[defaultPage].line) chartInstances[defaultPage].line.resize();
+                    }
+                }, 50);
+            }, 50);
+        }
+        // 等 DOM + 布局就绪再初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapDefaultPage);
+        } else {
+            bootstrapDefaultPage();
+        }
     </script>
 
     <!-- 自定义浮窗 -->
